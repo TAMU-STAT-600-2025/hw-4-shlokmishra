@@ -230,17 +230,71 @@ fitLASSO <- function(X ,Y, lambda_seq = NULL, n_lambda = 60, eps = 0.001){
 # eps - precision level for convergence assessment, default 0.001
 cvLASSO <- function(X ,Y, lambda_seq = NULL, n_lambda = 60, k = 5, fold_ids = NULL, eps = 0.001){
   # [ToDo] Fit Lasso on original data using fitLASSO
+  full_fit <- fitLASSO(X, Y, lambda_seq, n_lambda, eps)
+  lambda_seq <- full_fit$lambda_seq
+  beta_mat <- full_fit$beta_mat
+  beta0_vec <- full_fit$beta0_vec
+  n_lambda_actual <- length(lambda_seq)
  
   # [ToDo] If fold_ids is NULL, split the data randomly into k folds.
   # If fold_ids is not NULL, split the data according to supplied fold_ids.
+  n <- nrow(X)
+  if (is.null(fold_ids)) {
+    # Random assignment to k folds
+    fold_ids <- sample(rep(seq_len(k), length.out = n))
+  } else {
+    # Use supplied fold_ids and update k
+    k <- max(fold_ids)
+  }
   
   # [ToDo] Calculate LASSO on each fold using fitLASSO,
   # and perform any additional calculations needed for CV(lambda) and SE_CV(lambda)
+  cv_errors <- matrix(0, nrow = k, ncol = n_lambda_actual)
+  
+  for (fold in seq_len(k)) {
+    # Split data into training and validation sets
+    train_idx <- which(fold_ids != fold)
+    val_idx <- which(fold_ids == fold)
+    
+    X_train <- X[train_idx, , drop = FALSE]
+    Y_train <- Y[train_idx]
+    X_val <- X[val_idx, , drop = FALSE]
+    Y_val <- Y[val_idx]
+    
+    # Fit LASSO on training data
+    fold_fit <- fitLASSO(X_train, Y_train, lambda_seq, n_lambda_actual, eps)
+    
+    # Calculate prediction errors on validation set for each lambda
+    for (i in seq_len(n_lambda_actual)) {
+      y_pred <- fold_fit$beta0_vec[i] + X_val %*% fold_fit$beta_mat[, i]
+      cv_errors[fold, i] <- mean((Y_val - y_pred)^2)
+    }
+  }
+  
+  # Calculate CV mean and standard error for each lambda
+  cvm <- colMeans(cv_errors)
+  cvse <- apply(cv_errors, 2, sd) / sqrt(k)
   
   # [ToDo] Find lambda_min
+  min_idx <- which.min(cvm)
+  lambda_min <- lambda_seq[min_idx]
 
   # [ToDo] Find lambda_1SE
+  # Find the largest lambda within 1 SE of the minimum
+  min_cv <- cvm[min_idx]
+  min_cv_se <- cvse[min_idx]
+  threshold <- min_cv + min_cv_se
   
+  # Find all lambdas with CV error <= threshold
+  valid_idx <- which(cvm <= threshold)
+  if (length(valid_idx) > 0) {
+    # Take the largest lambda (smallest index since lambda_seq is decreasing)
+    lambda_1se_idx <- min(valid_idx)
+    lambda_1se <- lambda_seq[lambda_1se_idx]
+  } else {
+    # Fallback to lambda_min if no lambda satisfies 1SE rule
+    lambda_1se <- lambda_min
+  }
   
   # Return output
   # Output from fitLASSO on the whole data
