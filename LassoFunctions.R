@@ -124,22 +124,50 @@ fitLASSOstandardized <- function(Xtilde, Ytilde, lambda, beta_start = NULL, eps 
 # eps - precision level for convergence assessment, default 0.001
 fitLASSOstandardized_seq <- function(Xtilde, Ytilde, lambda_seq = NULL, n_lambda = 60, eps = 0.001){
   # [ToDo] Check that n is the same between Xtilde and Ytilde
+  Xmat <- as.matrix(Xtilde)
+  n <- nrow(Xmat)
+  p <- ncol(Xmat)
+  if (length(Ytilde) != n) stop("Xtilde and Ytilde must have matching n")
  
   # [ToDo] Check for the user-supplied lambda-seq (see below)
   # If lambda_seq is supplied, only keep values that are >= 0,
   # and make sure the values are sorted from largest to smallest.
   # If none of the supplied values satisfy the requirement,
   # print the warning message and proceed as if the values were not supplied.
-  
+  if (!is.null(lambda_seq)) {
+    lambda_seq <- lambda_seq[lambda_seq >= 0]
+    if (length(lambda_seq) == 0) {
+      warning("No valid lambda values supplied, generating default sequence")
+      lambda_seq <- NULL
+    } else {
+      lambda_seq <- sort(lambda_seq, decreasing = TRUE)
+    }
+  }
   
   # If lambda_seq is not supplied, calculate lambda_max 
   # (the minimal value of lambda that gives zero solution),
   # and create a sequence of length n_lambda as
-  lambda_seq = exp(seq(log(lambda_max), log(0.01), length = n_lambda))
+  if (is.null(lambda_seq)) {
+    # lambda_max = max_j |X_j^T Y| / n for standardized X
+    lambda_max <- max(abs(t(Xmat) %*% Ytilde)) / n
+    lambda_seq <- exp(seq(log(lambda_max), log(0.01), length = n_lambda))
+  }
   
   # [ToDo] Apply fitLASSOstandardized going from largest to smallest lambda 
   # (make sure supplied eps is carried over). 
   # Use warm starts strategy discussed in class for setting the starting values.
+  n_lambda_actual <- length(lambda_seq)
+  beta_mat <- matrix(0, nrow = p, ncol = n_lambda_actual)
+  fmin_vec <- numeric(n_lambda_actual)
+  
+  beta_start <- NULL
+  for (i in seq_len(n_lambda_actual)) {
+    result <- fitLASSOstandardized(Xmat, Ytilde, lambda_seq[i], beta_start, eps)
+    beta_mat[, i] <- result$beta
+    fmin_vec[i] <- result$fmin
+    # Warm start: use solution from current lambda as starting point for next
+    beta_start <- result$beta
+  }
   
   # Return output
   # lambda_seq - the actual sequence of tuning parameters used
@@ -156,12 +184,33 @@ fitLASSOstandardized_seq <- function(Xtilde, Ytilde, lambda_seq = NULL, n_lambda
 # eps - precision level for convergence assessment, default 0.001
 fitLASSO <- function(X ,Y, lambda_seq = NULL, n_lambda = 60, eps = 0.001){
   # [ToDo] Center and standardize X,Y based on standardizeXY function
+  std_result <- standardizeXY(X, Y)
+  Xtilde <- std_result$Xtilde
+  Ytilde <- std_result$Ytilde
+  Ymean <- std_result$Ymean
+  Xmeans <- std_result$Xmeans
+  weights <- std_result$weights
  
   # [ToDo] Fit Lasso on a sequence of values using fitLASSOstandardized_seq
   # (make sure the parameters carry over)
+  fit_result <- fitLASSOstandardized_seq(Xtilde, Ytilde, lambda_seq, n_lambda, eps)
+  lambda_seq <- fit_result$lambda_seq
+  beta_tilde_mat <- fit_result$beta_mat
+  fmin_vec <- fit_result$fmin_vec
  
   # [ToDo] Perform back scaling and centering to get original intercept and coefficient vector
   # for each lambda
+  p <- ncol(X)
+  n_lambda_actual <- length(lambda_seq)
+  beta_mat <- matrix(0, nrow = p, ncol = n_lambda_actual)
+  beta0_vec <- numeric(n_lambda_actual)
+  
+  for (i in seq_len(n_lambda_actual)) {
+    # Back-scale coefficients: beta_original = beta_tilde / weights
+    beta_mat[, i] <- beta_tilde_mat[, i] / weights
+    # Back-center intercept: beta0 = Ymean - Xmeans^T * beta_original
+    beta0_vec[i] <- Ymean - sum(Xmeans * beta_mat[, i])
+  }
   
   # Return output
   # lambda_seq - the actual sequence of tuning parameters used
