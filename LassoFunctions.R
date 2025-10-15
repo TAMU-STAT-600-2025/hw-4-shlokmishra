@@ -62,17 +62,52 @@ lasso <- function(Xtilde, Ytilde, beta, lambda){
 # eps - precision level for convergence assessment, default 0.001
 fitLASSOstandardized <- function(Xtilde, Ytilde, lambda, beta_start = NULL, eps = 0.001){
   #[ToDo]  Check that n is the same between Xtilde and Ytilde
+  Xmat <- as.matrix(Xtilde)
+  n <- nrow(Xmat)
+  p <- ncol(Xmat)
+  if (length(Ytilde) != n) stop("Xtilde and Ytilde must have matching n")
   
   #[ToDo]  Check that lambda is non-negative
+  if (lambda < 0) stop("lambda must be non-negative")
   
   #[ToDo]  Check for starting point beta_start. 
   # If none supplied, initialize with a vector of zeros.
   # If supplied, check for compatibility with Xtilde in terms of p
+  if (is.null(beta_start)) {
+    beta <- rep(0, p)
+  } else {
+    if (length(beta_start) != p) stop("beta_start length must match number of columns in Xtilde")
+    beta <- as.numeric(beta_start)
+  }
   
   #[ToDo]  Coordinate-descent implementation. 
   # Stop when the difference between objective functions is less than eps for the first time.
   # For example, if you have 3 iterations with objectives 3, 1, 0.99999,
   # your should return fmin = 0.99999, and not have another iteration
+  
+  # Maintain residual for efficiency: r = Y - X %*% beta
+  r <- as.numeric(Ytilde - Xmat %*% beta)
+  f_prev <- Inf
+  repeat {
+    # One full cyclic sweep over coordinates
+    for (j in seq_len(p)) {
+      xj <- Xmat[, j]
+      # Add back current contribution of feature j to the residual
+      r <- r + xj * beta[j]
+      # With standardized columns (n^{-1} xj^T xj = 1), the update is soft(mean(xj * r), lambda)
+      rho <- sum(xj * r) / n
+      beta_new_j <- soft(rho, lambda)
+      # Update residual and coefficient
+      r <- r - xj * beta_new_j
+      beta[j] <- beta_new_j
+    }
+    f_curr <- lasso(Xmat, Ytilde, beta, lambda)
+    if ((f_prev - f_curr) < eps) {
+      fmin <- f_curr
+      break
+    }
+    f_prev <- f_curr
+  }
   
   # Return 
   # beta - the solution (a vector)
