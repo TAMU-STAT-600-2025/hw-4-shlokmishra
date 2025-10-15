@@ -40,14 +40,8 @@ soft <- function(a, lambda){
 # lamdba - tuning parameter
 # beta - value of beta at which to evaluate the function
 lasso <- function(Xtilde, Ytilde, beta, lambda){
-  # Basic checks
-  if (lambda < 0) stop("lambda must be non-negative")
   Xmat <- as.matrix(Xtilde)
   n <- nrow(Xmat)
-  if (length(Ytilde) != n) stop("Xtilde and Ytilde must have matching n")
-  p <- ncol(Xmat)
-  if (length(beta) != p) stop("beta length must match number of columns in Xtilde")
-  
   r <- as.numeric(Ytilde - Xmat %*% beta)
   data_term <- sum(r * r) / (2 * n)
   pen_term <- lambda * sum(abs(beta))
