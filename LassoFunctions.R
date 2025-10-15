@@ -3,9 +3,21 @@
 # Y - n x 1 response vector
 standardizeXY <- function(X, Y){
   # [ToDo] Center Y
+  Ymean <- mean(Y)
+  Ytilde <- as.numeric(Y - Ymean)
   
   # [ToDo] Center and scale X
-  
+  Xmeans <- colMeans(X)
+  Xcentered <- sweep(X, 2, Xmeans, "-")
+  n <- nrow(Xcentered)
+  # weights are sqrt((X_j^T X_j)/n) after centering
+  weights <- sqrt(colSums(Xcentered * Xcentered) / n)
+  # avoid division by zero for zero-variance columns
+  safe_weights <- ifelse(weights == 0, 1, weights)
+  Xtilde <- sweep(Xcentered, 2, safe_weights, "/")
+  if (any(weights == 0)) {
+    Xtilde[, weights == 0] <- 0
+  }
   
   # Return:
   # Xtilde - centered and appropriately scaled X
@@ -19,7 +31,7 @@ standardizeXY <- function(X, Y){
 # [ToDo] Soft-thresholding of a scalar a at level lambda 
 # [OK to have vector version as long as works correctly on scalar; will only test on scalars]
 soft <- function(a, lambda){
-
+  return(sign(a) * pmax(abs(a) - lambda, 0))
 }
 
 # [ToDo] Calculate objective function of lasso given current values of Xtilde, Ytilde, beta and lambda
